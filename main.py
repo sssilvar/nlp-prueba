@@ -1,17 +1,50 @@
 #!/bin/env python3
+import os
 import sys
-from os.path import realpath
+from os.path import realpath, join, isfile, dirname
 
 import pandas as pd
-import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
 
+import nltk
+from string import punctuation
+from nltk.corpus import stopwords
+from nltk.stem.snowball import SnowballStemmer
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+sns.set()
+
 from pd2img.converter import dataframe_to_image
 
-sys.path.append(realpath(__file__))
-sns.set()
+# Carpeta raíz
+root = dirname(realpath(__file__))
+sys.path.append(root)
+
+# Descargar diccionarios
+nltk.download('stopwords')
+nltk.download('punkt')
+
+
+def remove_punctuation(text):
+    """
+    Función para remover los signos de puntiación y carácteres especiales.
+    :param text: (str) contiene el texto a preprocesar.
+    :return: (str) texto sin signos.
+    """
+    no_punct = ''.join([c for c in text if c not in punctuation])
+    return no_punct
+
+
+def tokenize(text):
+    no_punct = remove_punctuation(text)
+    tokens = nltk.word_tokenize(no_punct, language='spanish')
+    stems = []
+    for item in tokens:
+        stems.append(SnowballStemmer("spanish").stem(item))
+    return stems
 
 
 def extract_data_vectors(filename, training_sheets, testing_sheets):
@@ -50,13 +83,14 @@ def create_pipeline():
     :return: Sklearn Pipeline
     """
     # Crear un vectorizador para extraer características del texto de entrada (respuestas).
-    vectorizer = TfidfVectorizer(analyzer='word',
-                                 token_pattern='\w{1,}',
-                                 max_features=5000)
+    # vectorizer = TfidfVectorizer(analyzer='word',
+    #                              token_pattern='\w{1,}',
+    #                              max_features=5000)
+    vectorizer = TfidfVectorizer(tokenizer=tokenize, max_features=5000)
 
     # Crear un clasificador que se encarge de aprender y asignar las características del texto.
     # (Random Forest)
-    clf = RandomForestClassifier(n_estimators=10)
+    clf = RandomForestClassifier(n_estimators=50, random_state=42)
 
     # Crear y retornar el pipeline
     pipeline = Pipeline([
@@ -73,15 +107,27 @@ def extract_sample(dataframe):
     :return: (pandas.DataFrame) muestra aleatoria de 5 elementos
     """
     if len(dataframe) > 5:
-        return dataframe.sample(5)
+        return dataframe.sample(n=5, random_state=21)
     else:
         return dataframe.head()
 
 
 if __name__ == '__main__':
+    # Definir ruta de archivo excel al mismo nivel del script.
+    excel_file = join(root, 'Datos Ejercicio CIIURev4.xlsx')
+    print(f'Data file: {excel_file}')
+    assert isfile(excel_file), 'Excel data file was not found.'  # Verificar existencia del archivo Excel
+
+    # Carpeta de resultados
+    out_folder = join(root, 'results')
+    os.makedirs(out_folder, exist_ok=True)
+
+    # Crear imágenes de los DataFrames (para poner en presentación)
+    create_images = False
+
     # Leer el archivo Excel que contiene las respuestas
     # y crear dos dataframes (entrenamiento/validación)
-    X, y, X_test = extract_data_vectors(filename='Datos Ejercicio CIIURev4.xlsx',
+    X, y, X_test = extract_data_vectors(filename=excel_file,
                                         training_sheets=['mes1', 'mes2', 'mes3'],
                                         testing_sheets=['validacion'])
     df_train = pd.concat([X, y], axis='columns')
@@ -92,14 +138,25 @@ if __name__ == '__main__':
 
     # Instanciar y entrenar pipeline
     pipeline = create_pipeline()
+    print('Training pipeline...')
     pipeline.fit(X, y)
 
     # Validar modelo utilizando datos de prueba
     # (Asignación de etiquetas): y_pred
+    print('Testing pipeline...')
     y_pred = pipeline.predict(X_test)
     y_pred = pd.Series(y_pred, name='RAMA2D_R4')
 
+    # Crear Dataframe con categorías predecidas
     df_pred = pd.concat([X_test, y_pred], axis='columns')
+
+    # Graficar distribución
+    plt.figure(figsize=(20, 8))
+    ordered_labels = df_pred['RAMA2D_R4'].value_counts().index
+    sns.countplot(x='RAMA2D_R4', data=df_pred, order=ordered_labels)
+    plt.yscale('log')
+    plt.xticks(rotation=90)
+    plt.savefig(join(out_folder, 'result_distribition.png'), bbox_inches='tight')
 
     # Analizar resultados encontrados por categoría.
     categories = y.value_counts().index
@@ -123,10 +180,11 @@ if __name__ == '__main__':
 
         # Guardar dataframes como imágenes
         # (para reporte y presentación)
-        try:
-            dataframe_to_image(data=df_test_head,
-                               outputfile=f'/tmp/{category}_test.png')
-            dataframe_to_image(data=df_train_head,
-                               outputfile=f'/tmp/{category}_train.png')
-        except:
-            pass
+        if create_images:
+            try:
+                dataframe_to_image(data=df_test_head,
+                                   outputfile=join(out_folder, f'{category}_test.png'))
+                dataframe_to_image(data=df_train_head,
+                                   outputfile=join(out_folder, f'{category}_train.png'))
+            except:
+                pass
