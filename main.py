@@ -65,6 +65,7 @@ def create_pipeline():
     ])
     return pipeline
 
+
 def extract_sample(dataframe):
     """
     Extrae una muestra aleatoria si la cantidad de observaciones por cada clase es mayor a 5.
