@@ -150,6 +150,9 @@ if __name__ == '__main__':
     # Crear Dataframe con categorías predecidas
     df_pred = pd.concat([X_test, y_pred], axis='columns')
 
+    # Guardar Excel con predicciones
+    df_pred.to_excel(join(out_folder, 'predicciones.xlsx'))
+
     # Graficar distribución
     plt.figure(figsize=(20, 8))
     ordered_labels = df_pred['RAMA2D_R4'].value_counts().index
