@@ -17,11 +17,11 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 sns.set()
 
-from pd2img.converter import dataframe_to_image
-
 # Carpeta raíz
 root = dirname(realpath(__file__))
 sys.path.append(root)
+from pd2img.converter import dataframe_to_image
+
 
 # Descargar diccionarios
 nltk.download('stopwords')
